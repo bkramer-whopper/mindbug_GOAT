@@ -70,8 +70,7 @@ class Card:
         if self.name == "Goblin Werewolf" and game.active is ctrl:
             p += 6
         if self.name != "Shield Bugs":
-            if any(c.name == "Shield Bugs" for c in ctrl.in_play if c is not self):
-                p += 1
+            p += sum(1 for c in ctrl.in_play if c.name == "Shield Bugs" and c is not self)
         if self.name != "Urchin Hurler" and game.active is ctrl:
             if any(c.name == "Urchin Hurler" for c in ctrl.in_play if c is not self):
                 p += 2
@@ -530,6 +529,20 @@ def build_deck() -> list[Card]:
 
 # ─── Monte Carlo simulation ───────────────────────────────────────────────────
 
+def _determinize(g: Game, perspective_idx: int):
+    """
+    Randomize the opponent's hidden cards (hand + draw_pile) so the simulation
+    samples a plausible world rather than using the true private card distribution.
+    Discard pile and in_play are public and left unchanged.
+    """
+    opp  = g.players[1 - perspective_idx]
+    pool = opp.hand + opp.draw_pile
+    random.shuffle(pool)
+    n_hand        = len(opp.hand)
+    opp.hand      = pool[:n_hand]
+    opp.draw_pile = pool[n_hand:]
+
+
 def _run_to_end(game: Game, max_turns: int = 150) -> Player | None:
     """
     Run a game copy to completion with all-random play, silently.
@@ -596,6 +609,7 @@ def mcts_choose_mindbug(game: Game, opp: Player, card: Card, ctrl: Player) -> bo
             g_ctrl = g.players[ctrl_idx]
             card_c = copy.deepcopy(card)
 
+            _determinize(g, opp_idx)   # hide ctrl's hand/draw_pile from opp's perspective
             for p in g.players:    # ensure all bots use random during effects
                 p.bot_type = "random"
 
@@ -658,6 +672,7 @@ def mcts_choose_blocker(
             g_opp = g.players[opp_idx]
             g_ctrl= g.players[ctrl_idx]
 
+            _determinize(g, opp_idx)   # hide ctrl's hand/draw_pile from opp's perspective
             for p in g.players:
                 p.bot_type = "random"
 
@@ -714,6 +729,7 @@ def mcts_choose(game: Game, ctrl: Player) -> tuple[str, int]:
         wins = 0
         for _ in range(MCTS_SIMS):
             g   = copy.deepcopy(game)
+            _determinize(g, ctrl_idx)   # hide opp's hand/draw_pile from ctrl's perspective
             bot = g.players[ctrl_idx]
             bot._sim_main    = action_type
             bot.choice_queue = [choice_idx]
