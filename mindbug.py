@@ -531,13 +531,25 @@ def build_deck() -> list[Card]:
 
 def _determinize(g: Game, perspective_idx: int):
     """
-    Randomize the opponent's hidden cards (hand + draw_pile) so the simulation
-    samples a plausible world rather than using the true private card distribution.
-    Discard pile and in_play are public and left unchanged.
+    Randomize the opponent's hidden cards without using knowledge the perspective
+    player shouldn't have. Builds the unknown pool from all_dealt_cards minus every
+    card visible to the perspective player (their own zones + opp's public zones),
+    so each simulation samples a plausible world rather than the true hand contents.
     """
+    ctrl = g.players[perspective_idx]
     opp  = g.players[1 - perspective_idx]
-    pool = opp.hand + opp.draw_pile
+
+    # Everything ctrl can legitimately see
+    known_uids = set(
+        c.uid for c in
+        ctrl.hand + ctrl.in_play + ctrl.discard + ctrl.draw_pile +
+        opp.in_play + opp.discard
+    )
+
+    # Possible opponent cards = all dealt cards not accounted for in visible zones
+    pool = [c for c in g.all_dealt_cards if c.uid not in known_uids]
     random.shuffle(pool)
+
     n_hand        = len(opp.hand)
     opp.hand      = pool[:n_hand]
     opp.draw_pile = pool[n_hand:]
@@ -685,7 +697,14 @@ def mcts_choose_blocker(
                     blk_c = next((c for c in g_opp.in_play if c.uid == blk_uid), None)
                     if blk_c:
                         g._resolve_combat(atk_c, g_ctrl, blk_c, g_opp)
-                # Advance to opp's turn (Frenzy skipped for simplicity)
+
+                # If attacker survived and has Frenzy, force a second attack
+                if (atk_c is not None
+                        and atk_c in g_ctrl.in_play
+                        and FRENZY in atk_c.effective_keywords(g, g_ctrl)
+                        and not g._check_win()):
+                    g._do_attack(atk_c, g_ctrl, already_frenzied=True)
+
                 g.extra_turn = False
                 g.active_idx = opp_idx
 
@@ -775,6 +794,12 @@ class Game:
             p.draw_pile = deck[:10]
             deck        = deck[10:]
             p.draw_to(5)
+
+        # Snapshot of every card in play — used by _determinize to build
+        # the unknown pool from public info rather than peeking at opp zones.
+        self.all_dealt_cards: list[Card] = [
+            c for p in self.players for c in p.hand + p.draw_pile
+        ]
 
     def opp(self, player: Player) -> Player:
         return self.players[1] if player is self.players[0] else self.players[0]
