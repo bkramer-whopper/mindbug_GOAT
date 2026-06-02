@@ -724,15 +724,30 @@ def mcts_choose(game: Game, ctrl: Player) -> tuple[str, int]:
 
     print(f"  [MCTS] evaluating {len(candidates)} actions × {MCTS_SIMS} simulations…")
 
+    opp_idx = 1 - ctrl_idx
+    opp     = game.players[opp_idx]
+
     best_i, best_wr = 0, -1.0
     for i, (action_type, choice_idx, label) in enumerate(candidates):
         wins = 0
+
+        # Probability the opponent Mindbugs this card if we play it
+        mb_prob = 0.0
+        if action_type == "play" and opp.mindbugs > 0 and ctrl.hand:
+            mb_prob = min(1.0, opp.mindbugs / len(ctrl.hand))
+
         for _ in range(MCTS_SIMS):
-            g   = copy.deepcopy(game)
+            g     = copy.deepcopy(game)
             _determinize(g, ctrl_idx)   # hide opp's hand/draw_pile from ctrl's perspective
-            bot = g.players[ctrl_idx]
+            bot   = g.players[ctrl_idx]
+            g_opp = g.players[opp_idx]
             bot._sim_main    = action_type
             bot.choice_queue = [choice_idx]
+
+            # Pre-load the opponent's Mindbug decision using the risk probability
+            if action_type == "play" and g_opp.mindbugs > 0:
+                g_opp.choice_queue = [random.random() < mb_prob]
+
             winner = _run_to_end(g)
             if winner is not None and g.players.index(winner) == ctrl_idx:
                 wins += 1
