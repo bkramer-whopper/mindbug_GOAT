@@ -22,7 +22,7 @@ Card data sourced from https://mindbug.fandom.com/wiki/First_Contact
 from __future__ import annotations
 import copy, io, contextlib, random
 
-MCTS_SIMS = 250   # Monte Carlo simulations per candidate action
+MCTS_SIMS = 100   # Monte Carlo simulations per candidate action
 
 FRENZY    = "Frenzy"
 HUNTER    = "Hunter"
@@ -1055,19 +1055,51 @@ class Game:
             label = " [BOT]" if p.is_bot else ""
             print(f"  {p.name}{label}: {p.life} life remaining")
         _sep()
+        return winner
 
 
 # ─── Entry point ──────────────────────────────────────────────────────────────
+
+def run_batch(n: int):
+    """Run n silent games of Random Bot vs MCTS Bot and print a summary."""
+    wins = {"Random Bot": 0, "MCTS Bot": 0}
+    for i in range(1, n + 1):
+        p1 = Player("Random Bot", bot_type="random")
+        p2 = Player("MCTS Bot",   bot_type="mcts")
+        with contextlib.redirect_stdout(io.StringIO()):
+            winner = Game(p1, p2).run()
+        wins[winner.name] += 1
+        print(f"  Game {i:>{len(str(n))}}/{n}  →  {winner.name} wins"
+              f"  (Random {wins['Random Bot']} – {wins['MCTS Bot']} MCTS)")
+    _sep()
+    total = wins["Random Bot"] + wins["MCTS Bot"]
+    print(f"  Results after {total} games:")
+    for name, w in wins.items():
+        print(f"    {name:<12}  {w:>4} wins  ({w/total:.1%})")
+    _sep()
+
 
 def main():
     _hdr("MINDBUG SIMULATOR")
     _sep()
     p1_name = input("  Your name [Player 1]: ").strip() or "Player 1"
 
-    print("  Opponent:  [h]uman  [r]andom bot  [m]cts bot")
+    print("  Opponent:  [h]uman  [r]andom bot  [m]cts bot  [s]imulate (random vs mcts)")
     mode = input("  Choice: ").strip().lower()
 
-    if mode in ("r", "random"):
+    if mode in ("s", "simulate"):
+        while True:
+            try:
+                n = int(input("  Number of games to simulate: ").strip())
+                if n > 0:
+                    break
+                print("  Enter a positive integer.")
+            except ValueError:
+                print("  Enter a positive integer.")
+        print(f"  Simulating {n} games: Random Bot vs MCTS Bot  ({MCTS_SIMS} sims/action)\n")
+        run_batch(n)
+        return
+    elif mode in ("r", "random"):
         p1 = Player(p1_name)
         p2 = Player("Random Bot", bot_type="random")
         print(f"  {p1_name} vs Random Bot")
