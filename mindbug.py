@@ -964,7 +964,8 @@ class Game:
     # ── Turn phases ───────────────────────────────────────────────────────────
 
     def _phase_play(self, ctrl: Player):
-        self._show_hand(ctrl)
+        if ctrl.is_bot:
+            self._show_hand(ctrl)
         if not ctrl.hand:
             print(f"  {ctrl.name} has no cards to play.")
             return
@@ -1045,6 +1046,7 @@ class Game:
                 else:
                     action = "attack"
             else:               # human
+                self._show_hand(ctrl)
                 if can_play and can_attack:
                     while True:
                         choice = input(f"\n  Action – [p]lay a card or [a]ttack? ").strip().lower()
